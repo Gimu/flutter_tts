@@ -79,7 +79,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
               if (isLanguageAvailable(locale)) {
                 tts.setLanguage(locale);
               }
-            } catch (NullPointerException | java.lang.IllegalArgumentException e) {
+            } catch (NullPointerException | NoSuchMethodError | java.lang.IllegalArgumentException e) {
               Log.d(tag, "getDefaultVoice: " + e.getMessage() + " (known issue with API 21 & 22)");
             }
           } else {
