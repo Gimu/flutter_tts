@@ -68,7 +68,13 @@ public class FlutterTtsPlugin implements MethodCallHandler {
             channel.invokeMethod("tts.init", true);
 
             try {
-              Locale locale = tts.getDefaultVoice().getLocale();
+              Locale locale;
+              if (Build.VERSION.SDK_INT >= 21) {
+                // getDefaultLanguage() has been deprecated for getDefaultVoice() in API level 21
+                locale = tts.getDefaultVoice().getLocale();
+              } else {
+                locale = tts.getDefaultLanguage();
+              }
               if (isLanguageAvailable(locale)) {
                 tts.setLanguage(locale);
               }
