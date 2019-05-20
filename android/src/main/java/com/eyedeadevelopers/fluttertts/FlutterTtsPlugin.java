@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.apache.commons.lang3.LocaleUtils;
+
 /** FlutterTtsPlugin */
 public class FlutterTtsPlugin implements MethodCallHandler {
   private final MethodChannel channel;
@@ -124,7 +126,12 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       setVoice(voice, result);
     } else if (call.method.equals("isLanguageAvailable")) {
       String language = ((HashMap) call.arguments()).get("language").toString();
-      Locale locale = Locale.forLanguageTag(language);
+      Locale locale;
+      if (Build.VERSION.SDK_INT >= 21) {
+        locale = Locale.forLanguageTag(language);
+      } else {
+        locale = LocaleUtils.toLocale(language);
+      }
       result.success(isLanguageAvailable(locale));
     } else {
       result.notImplemented();
@@ -146,7 +153,12 @@ public class FlutterTtsPlugin implements MethodCallHandler {
   }
 
   void setLanguage(String language, Result result) {
-    Locale locale = Locale.forLanguageTag(language);
+    Locale locale;
+    if (Build.VERSION.SDK_INT >= 21) {
+      locale = Locale.forLanguageTag(language);
+    } else {
+      locale = LocaleUtils.toLocale(language);
+    }
     if (isLanguageAvailable(locale)) {
       tts.setLanguage(locale);
       result.success(1);
