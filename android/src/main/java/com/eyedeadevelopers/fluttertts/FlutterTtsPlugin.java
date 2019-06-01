@@ -115,6 +115,8 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       getVoices(result);
     } else if (call.method.equals("getTTSEngines")) {
       getTTSEngines(result);
+    } else if (call.method.equals("getDefaultEngineName")) {
+      getDefaultEngineName(result);
     } else if (call.method.equals("setVoice")) {
       String voice = call.arguments.toString();
       setVoice(voice, result);
@@ -222,6 +224,10 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       engineNames.add(info.name);
     }
     result.success(engineNames);
+  }
+
+  void getDefaultEngineName(Result result) {
+    result.success(tts.getDefaultEngine());
   }
 
   void getLanguages(Result result) {
