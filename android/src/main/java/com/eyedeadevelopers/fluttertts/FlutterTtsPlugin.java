@@ -245,7 +245,11 @@ public class FlutterTtsPlugin implements MethodCallHandler {
 
   void speak(String text) {
     uuid = UUID.randomUUID().toString();
-    tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, uuid);
+    if (Build.VERSION.SDK_INT >= 21) {
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, uuid);
+    } else {
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
+    }
   }
 
   void stop() {
