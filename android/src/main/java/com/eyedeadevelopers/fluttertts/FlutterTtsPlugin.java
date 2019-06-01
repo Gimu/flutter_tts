@@ -13,6 +13,7 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
+import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
@@ -23,17 +24,19 @@ public class FlutterTtsPlugin implements MethodCallHandler {
   private final MethodChannel channel;
   private TextToSpeech tts;
   private final String tag = "TTS";
-  //private final String googleTtsEngine = "com.google.android.tts";
   String uuid;
   Bundle bundle;
 
+  private final Registrar mRegistrar;
+
   /** Plugin registration. */
-  private FlutterTtsPlugin(Context context, MethodChannel channel) {
+  private FlutterTtsPlugin(Registrar registrar, MethodChannel channel) {
+    this.mRegistrar = registrar;
     this.channel = channel;
     this.channel.setMethodCallHandler(this);
 
     bundle = new Bundle();
-    tts = new TextToSpeech(context.getApplicationContext(), onInitListener);//, googleTtsEngine);
+    tts = new TextToSpeech(registrar.context(), onInitListener);
   };
 
   private UtteranceProgressListener utteranceProgressListener =
@@ -68,19 +71,10 @@ public class FlutterTtsPlugin implements MethodCallHandler {
             tts.setOnUtteranceProgressListener(utteranceProgressListener);
             channel.invokeMethod("tts.init", true);
 
-            try {
-              Locale locale;
-              if (Build.VERSION.SDK_INT >= 21) {
-                // getDefaultLanguage() has been deprecated for getDefaultVoice() in API level 21
-                locale = tts.getDefaultVoice().getLocale();
-              } else {
-                locale = tts.getDefaultLanguage();
-              }
-              if (isLanguageAvailable(locale)) {
-                tts.setLanguage(locale);
-              }
-            } catch (NullPointerException | NoSuchMethodError | java.lang.IllegalArgumentException e) {
-              Log.d(tag, "getDefaultVoice: " + e.getMessage() + " (known issue with API 21 & 22)");
+            // Set language on init
+            Locale locale = Locale.KOREA;
+            if (isLanguageAvailable(locale)) {
+              tts.setLanguage(locale);
             }
           } else {
             Log.d(tag, "Failed to initialize TextToSpeech");
@@ -90,7 +84,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
 
   public static void registerWith(Registrar registrar) {
     final MethodChannel channel = new MethodChannel(registrar.messenger(), "flutter_tts");
-    channel.setMethodCallHandler(new FlutterTtsPlugin(registrar.activeContext(), channel));
+    channel.setMethodCallHandler(new FlutterTtsPlugin(registrar, channel));
   }
 
   @Override
@@ -119,9 +113,14 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       getLanguages(result);
     } else if (call.method.equals("getVoices")) {
       getVoices(result);
+    } else if (call.method.equals("getTTSEngines")) {
+      getTTSEngines(result);
     } else if (call.method.equals("setVoice")) {
       String voice = call.arguments.toString();
       setVoice(voice, result);
+    } else if (call.method.equals("setTTSEngine")) {
+      String engine = call.arguments.toString();
+      setTTSEngine(engine, result);
     } else if (call.method.equals("isLanguageAvailable")) {
       String language = ((HashMap) call.arguments()).get("language").toString();
       Locale locale = Locale.KOREA;
@@ -177,6 +176,12 @@ public class FlutterTtsPlugin implements MethodCallHandler {
     result.success(0);
   }
 
+  void setTTSEngine(String engine, Result result) {
+    // Set engine and check if language is available with that engine
+    tts = new TextToSpeech(mRegistrar.context(), onInitListener, engine);
+    result.success(1);
+  }
+
   void setVolume(float volume, Result result) {
     if (volume >= 0.0F && volume <= 1.0F) {
       bundle.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume);
@@ -208,6 +213,15 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       Log.d(tag, "getVoices: " + e.getMessage());
       result.success(null);
     }
+  }
+
+  void getTTSEngines(Result result) {
+    List<TextToSpeech.EngineInfo> engines = tts.getEngines();
+    ArrayList<String> engineNames = new ArrayList<>();
+    for (TextToSpeech.EngineInfo info : engines) {
+      engineNames.add(info.name);
+    }
+    result.success(engineNames);
   }
 
   void getLanguages(Result result) {

@@ -45,6 +45,11 @@ class FlutterTts {
   Future<dynamic> setVoice(String voice) =>
       _channel.invokeMethod('setVoice', voice);
 
+  /// [Future] which invokes the platform specific method for setTTSEngine
+  /// ***Android supported only***
+  Future<dynamic> setTTSEngine(String engine) =>
+      _channel.invokeMethod('setTTSEngine', engine);
+
   /// [Future] which invokes the platform specific method for stop
   Future<dynamic> stop() => _channel.invokeMethod('stop');
 
@@ -62,6 +67,14 @@ class FlutterTts {
   Future<dynamic> get getVoices async {
     final voices = await _channel.invokeMethod('getVoices');
     return voices;
+  }
+
+  /// [Future] which invokes the platform specific method for getTTSEngines
+  /// ***Android supported only ***
+  /// Returns a `List` of engine names
+  Future<dynamic> get getTTSEngines async {
+    final engines = await _channel.invokeMethod('getTTSEngines');
+    return engines;
   }
 
   /// [Future] which invokes the platform specific method for isLanguageAvailable
