@@ -79,7 +79,7 @@ class FlutterTts {
 
   /// [Future] which invokes the platform specific method for getTTSEngines
   /// ***Android supported only ***
-  /// Returns a `String` of the default engine name
+  /// Returns a `String` of the default engine name, prefers google tts if available
   Future<dynamic> get getDefaultEngineName async {
     final engineName = await _channel.invokeMethod('getDefaultEngineName');
     return engineName;

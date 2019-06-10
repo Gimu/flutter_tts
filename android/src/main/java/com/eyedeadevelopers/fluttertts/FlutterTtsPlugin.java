@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.Map;
 
 /** FlutterTtsPlugin */
 public class FlutterTtsPlugin implements MethodCallHandler {
@@ -219,14 +220,21 @@ public class FlutterTtsPlugin implements MethodCallHandler {
 
   void getTTSEngines(Result result) {
     List<TextToSpeech.EngineInfo> engines = tts.getEngines();
-    ArrayList<String> engineNames = new ArrayList<>();
+    Map engineMap = new HashMap(); 
     for (TextToSpeech.EngineInfo info : engines) {
-      engineNames.add(info.name);
+      engineMap.put(info.label, info.name);
     }
-    result.success(engineNames);
+    result.success(engineMap);
   }
 
   void getDefaultEngineName(Result result) {
+    // Prefers google tts if available
+    List<TextToSpeech.EngineInfo> engines = tts.getEngines();
+    for (TextToSpeech.EngineInfo info : engines) {
+      if (info.name.equals("com.google.android.tts")) {
+        result.success("com.google.android.tts");
+      }
+    }
     result.success(tts.getDefaultEngine());
   }
 
