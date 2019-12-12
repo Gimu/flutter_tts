@@ -1,5 +1,6 @@
 package com.tundralabs.fluttertts;
 
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import android.os.Build;
 import android.app.Activity;
 import android.content.Context;
@@ -23,7 +24,18 @@ import java.util.UUID;
 import java.util.Map;
 
 /** FlutterTtsPlugin */
-public class FlutterTtsPlugin implements MethodCallHandler {
+public class FlutterTtsPlugin implements FlutterPlugin, MethodCallHandler {
+
+  @Override
+  public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
+    final MethodChannel channel = new MethodChannel(flutterPluginBinding.getFlutterEngine().getDartExecutor(), "testplugin");
+    channel.setMethodCallHandler(new TestpluginPlugin());
+  }
+
+  @Override
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+  }
+
   private final Handler handler;
   private final MethodChannel channel;
   private TextToSpeech tts;
