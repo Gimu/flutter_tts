@@ -1,7 +1,7 @@
 name: flutter_tts
 description: A flutter plugin for Text to Speech.  This plugin is supported on both IOS and Android.
-version: 0.2.3
-author: Daniel Lutton <eyedea32@gmail.com>
+version: 0.2.4
+author: Daniel Lutton <eyedea32@gmail.com> Son Nguyen <contact@anteger.com>
 homepage: https://github.com/dlutton/flutter_tts
 
 dependencies:
