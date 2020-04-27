@@ -247,6 +247,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
     for (TextToSpeech.EngineInfo info : engines) {
       if (info.name.equals("com.google.android.tts")) {
         result.success("com.google.android.tts");
+        return;
       }
     }
     result.success(tts.getDefaultEngine());
