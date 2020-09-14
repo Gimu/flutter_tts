@@ -158,12 +158,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
   }
 
   void setLanguage(String language, Result result) {
-    Locale locale = Locale.KOREA;
-    /*if (Build.VERSION.SDK_INT >= 21) {
-      locale = Locale.forLanguageTag(language);
-    } else {
-      locale = Locale.KOREAN;
-    }*/
+    Locale locale = Locale.forLanguageTag(language);
     if (isLanguageAvailable(locale)) {
       tts.setLanguage(locale);
       result.success(1);
