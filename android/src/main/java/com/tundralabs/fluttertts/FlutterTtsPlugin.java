@@ -27,7 +27,7 @@ import java.util.UUID;
 import java.util.Map;
 
 /** FlutterTtsPlugin */
-public class FlutterTtsPlugin implements MethodCallHandler {
+public class FlutterTtsPlugin implements MethodCallHandler, FlutterPlugin {
 
   private Handler handler;
   private MethodChannel methodChannel;
@@ -328,7 +328,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
 
   void setTTSEngine(String engine, Result result) {
     // Set engine and check if language is available with that engine
-    tts = new TextToSpeech(mRegistrar.context(), onInitListener, engine); // TODO
+    tts = new TextToSpeech(context, onInitListener, engine);
     result.success(1);
   }
 
