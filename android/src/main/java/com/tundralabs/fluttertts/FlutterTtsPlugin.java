@@ -1,8 +1,7 @@
 package com.tundralabs.fluttertts;
 
-import android.os.Build;
-import android.app.Activity;
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,94 +9,190 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.util.Log;
+import androidx.annotation.NonNull;
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
+import java.io.File;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.MissingResourceException;
 import java.util.UUID;
 import java.util.Map;
 
 /** FlutterTtsPlugin */
 public class FlutterTtsPlugin implements MethodCallHandler {
 
-  private final Handler handler;
-  private final MethodChannel channel;
+  private Handler handler;
+  private MethodChannel methodChannel;
+  private Context context;
   private TextToSpeech tts;
   private final String tag = "TTS";
-  String uuid;
+  private boolean isTtsInitialized = false;
+  private ArrayList<Runnable> pendingMethodCalls = new ArrayList<>();
+  private final HashMap<String, String> utterances = new HashMap<>();
   Bundle bundle;
-
-  private final Registrar mRegistrar;
+  private int silencems;
+  private static final String SILENCE_PREFIX = "SIL_";
+  private static final String SYNTHESIZE_TO_FILE_PREFIX = "STF_";
 
   /** Plugin registration. */
-  private FlutterTtsPlugin(Registrar registrar, MethodChannel channel) {
-    this.mRegistrar = registrar;
-    this.channel = channel;
-    this.channel.setMethodCallHandler(this);
-
-    handler = new Handler(Looper.getMainLooper());  
-    bundle = new Bundle();
-    tts = new TextToSpeech(registrar.context(), onInitListener);
-  };
-
-  private UtteranceProgressListener utteranceProgressListener =
-      new UtteranceProgressListener() {
-        @Override
-        public void onStart(String utteranceId) {
-          invokeMethod("speak.onStart", true);
-        }
-
-        @Override
-        public void onDone(String utteranceId) {
-          invokeMethod("speak.onComplete", true);
-        }
-
-        @Override
-        @Deprecated
-        public void onError(String utteranceId) {
-          invokeMethod("speak.onError", "Error from TextToSpeech");
-        }
-
-        @Override
-        public void onError(String utteranceId, int errorCode) {
-          invokeMethod("speak.onError", "Error from TextToSpeech - " + errorCode);
-        }
-      };
-
-  private TextToSpeech.OnInitListener onInitListener =
-      new TextToSpeech.OnInitListener() {
-        @Override
-        public void onInit(int status) {
-          if (status == TextToSpeech.SUCCESS) {
-            tts.setOnUtteranceProgressListener(utteranceProgressListener);
-            invokeMethod("tts.init", true);
-
-            // Set language on init
-            Locale locale = Locale.KOREA;
-            if (isLanguageAvailable(locale)) {
-              tts.setLanguage(locale);
-            }
-          } else {
-            Log.d(tag, "Failed to initialize TextToSpeech");
-          }
-        }
-      };
-
   public static void registerWith(Registrar registrar) {
-    final MethodChannel channel = new MethodChannel(registrar.messenger(), "flutter_tts");
-    channel.setMethodCallHandler(new FlutterTtsPlugin(registrar, channel));
+    FlutterTtsPlugin instance = new FlutterTtsPlugin();
+    instance.initInstance(registrar.messenger(), registrar.activeContext());
+  }
+
+  private void initInstance(BinaryMessenger messenger, Context context) {
+    this.context = context;
+    methodChannel = new MethodChannel(messenger, "flutter_tts");
+    methodChannel.setMethodCallHandler(this);
+    handler = new Handler(Looper.getMainLooper());
+    bundle = new Bundle();
+    tts = new TextToSpeech(context, onInitListener);
+  }
+  
+  /** Android Plugin APIs */
+  @Override
+  public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+    initInstance(binding.getBinaryMessenger(), binding.getApplicationContext());
   }
 
   @Override
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    stop();
+    tts.shutdown();
+    context = null;
+    methodChannel.setMethodCallHandler(null);
+    methodChannel = null;
+  }
+
+  private UtteranceProgressListener utteranceProgressListener = new UtteranceProgressListener() {
+    @Override
+    public void onStart(String utteranceId) {
+      if (utteranceId != null && utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        invokeMethod("synth.onStart", true);
+      } else {
+        //Log.d(tag, "Utterance ID has started: " + utteranceId);
+        invokeMethod("speak.onStart", true);
+      }
+      if (Build.VERSION.SDK_INT < 26) {
+        this.onProgress(utteranceId, 0, utterances.get(utteranceId).length());
+      }
+    }
+
+    @Override
+    public void onDone(String utteranceId) {
+      if (utteranceId != null && utteranceId.startsWith(SILENCE_PREFIX)) return;
+      if (utteranceId != null && utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        invokeMethod("synth.onComplete", true);
+      } else {
+        //Log.d(tag, "Utterance ID has completed: " + utteranceId);
+        invokeMethod("speak.onComplete", true);
+      }
+      utterances.remove(utteranceId);
+    }
+
+    @Override
+    public void onStop(String utteranceId, boolean interrupted) {
+      //Log.d(tag, "Utterance ID has been stopped: " + utteranceId + ". Interrupted: " + interrupted);
+      invokeMethod("speak.onCancel", true);
+    }
+
+    private void onProgress(String utteranceId, int startAt, int endAt) {
+      if (utteranceId != null && !utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        final String text = utterances.get(utteranceId);
+        final HashMap<String, String> data = new HashMap<>();
+        data.put("text", text);
+        data.put("start", Integer.toString(startAt));
+        data.put("end", Integer.toString(endAt));
+        data.put("word", text.substring(startAt, endAt));
+        invokeMethod("speak.onProgress", data);
+      }
+    }
+
+    // Requires Android 26 or later
+    @Override
+    public void onRangeStart(String utteranceId, int startAt, int endAt, int frame) {
+      if (utteranceId != null && !utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        super.onRangeStart(utteranceId, startAt, endAt, frame);
+        this.onProgress(utteranceId, startAt, endAt);
+      }
+    }
+
+    @Override
+    @Deprecated
+    public void onError(String utteranceId) {
+      if (utteranceId != null && utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        invokeMethod("synth.onError", "Error from TextToSpeech (synth)");
+      } else {
+        invokeMethod("speak.onError", "Error from TextToSpeech (speak)");
+      }
+    }
+
+    @Override
+    public void onError(String utteranceId, int errorCode) {
+      if (utteranceId != null && utteranceId.startsWith(SYNTHESIZE_TO_FILE_PREFIX)) {
+        invokeMethod("synth.onError", "Error from TextToSpeech (synth) - " + errorCode);
+      } else {
+        invokeMethod("speak.onError", "Error from TextToSpeech (speak) - " + errorCode);
+      }
+    }
+  };
+
+  private TextToSpeech.OnInitListener onInitListener = new TextToSpeech.OnInitListener() {
+    @Override
+    public void onInit(int status) {
+      if (status == TextToSpeech.SUCCESS) {
+        tts.setOnUtteranceProgressListener(utteranceProgressListener);
+
+        try {
+          Locale locale = tts.getDefaultVoice().getLocale();
+          if (isLanguageAvailable(locale)) {
+            tts.setLanguage(locale);
+          }
+        } catch (NullPointerException | IllegalArgumentException e) {
+          Log.e(tag, "getDefaultLocale: " + e.getMessage());
+        }
+
+        // Handle pending method calls (sent while TTS was initializing)
+        isTtsInitialized = true;
+        for (Runnable call : pendingMethodCalls) {
+          call.run();
+        }
+      } else {
+        Log.e(tag, "Failed to initialize TextToSpeech");
+      }
+    }
+  };
+
+  @Override
   public void onMethodCall(MethodCall call, Result result) {
+    // If TTS is still loading
+    if (!isTtsInitialized) {
+      // Suspend method call until the TTS engine is ready
+      final Runnable suspendedCall =
+          new Runnable() {
+            public void run() {
+              onMethodCall(call, result);
+            }
+          };
+      pendingMethodCalls.add(suspendedCall);
+      return;
+    }
     if (call.method.equals("speak")) {
       String text = call.arguments.toString();
       speak(text);
+      result.success(1);
+    } else if (call.method.equals("synthesizeToFile")) {
+      String text = call.argument("text");
+      String fileName = call.argument("fileName");
+      synthesizeToFile(text, fileName);
       result.success(1);
     } else if (call.method.equals("stop")) {
       stop();
@@ -119,6 +214,8 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       getLanguages(result);
     } else if (call.method.equals("getVoices")) {
       getVoices(result);
+    } else if (call.method.equals("getSpeechRateValidRange")) {
+      getSpeechRateValidRange(result);
     } else if (call.method.equals("getTTSEngines")) {
       getTTSEngines(result);
     } else if (call.method.equals("getDefaultEngineName")) {
@@ -130,14 +227,15 @@ public class FlutterTtsPlugin implements MethodCallHandler {
       String engine = call.arguments.toString();
       setTTSEngine(engine, result);
     } else if (call.method.equals("isLanguageAvailable")) {
-      String language = ((HashMap) call.arguments()).get("language").toString();
-      Locale locale = Locale.KOREA;
-      /*if (Build.VERSION.SDK_INT >= 21) {
-        locale = Locale.forLanguageTag(language);
-      } else {
-        locale = Locale.KOREAN;
-      }*/
+      String language = call.arguments().toString();
+      Locale locale = Locale.forLanguageTag(language);
       result.success(isLanguageAvailable(locale));
+      //String language = ((HashMap) call.arguments()).get("language").toString();
+    } else if (call.method.equals("setSilence")) {
+      String silencems = call.arguments.toString();
+      this.silencems = Integer.parseInt(silencems);
+    } else if (call.method.equals("setSharedInstance")) {
+      result.success(1);
     } else {
       result.notImplemented();
     }
@@ -148,13 +246,7 @@ public class FlutterTtsPlugin implements MethodCallHandler {
   }
 
   Boolean isLanguageAvailable(Locale locale) {
-    Boolean isLanguageAvailable = false;
-    if (tts.isLanguageAvailable(locale) == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
-      isLanguageAvailable = true;
-    } else {
-      Log.d(tag, "Language is not available - " + locale);
-    }
-    return isLanguageAvailable;
+    return tts.isLanguageAvailable(locale) >= TextToSpeech.LANG_AVAILABLE;
   }
 
   void setLanguage(String language, Result result) {
@@ -177,12 +269,6 @@ public class FlutterTtsPlugin implements MethodCallHandler {
     }
     Log.d(tag, "Voice name not found: " + voice);
     result.success(0);
-  }
-
-  void setTTSEngine(String engine, Result result) {
-    // Set engine and check if language is available with that engine
-    tts = new TextToSpeech(mRegistrar.context(), onInitListener, engine);
-    result.success(1);
   }
 
   void setVolume(float volume, Result result) {
@@ -218,13 +304,32 @@ public class FlutterTtsPlugin implements MethodCallHandler {
     }
   }
 
-  private void invokeMethod(final String method, final Object arguments) {
-    handler.post(new Runnable() {
-      @Override
-      public void run() {
-        channel.invokeMethod(method, arguments);
+  void getLanguages(Result result) {
+    ArrayList<String> locales = new ArrayList<>();
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        // While this method was introduced in API level 21, it seems that it
+        // has not been implemented in the speech service side until API Level 23.
+        for (Locale locale : tts.getAvailableLanguages()) {
+          locales.add(locale.toLanguageTag());
+        }
+      } else {
+        for (Locale locale : Locale.getAvailableLocales()) {
+          if (locale.getVariant().isEmpty() && isLanguageAvailable(locale)) {
+            locales.add(locale.toLanguageTag());
+          }
+        }
       }
-    });
+    } catch (MissingResourceException | NullPointerException e) {
+      Log.d(tag, "getLanguages: " + e.getMessage());
+    }
+    result.success(locales);
+  }
+
+  void setTTSEngine(String engine, Result result) {
+    // Set engine and check if language is available with that engine
+    tts = new TextToSpeech(mRegistrar.context(), onInitListener, engine); // TODO
+    result.success(1);
   }
 
   void getTTSEngines(Result result) {
@@ -248,29 +353,53 @@ public class FlutterTtsPlugin implements MethodCallHandler {
     result.success(tts.getDefaultEngine());
   }
 
-  void getLanguages(Result result) {
-    ArrayList<String> locales = new ArrayList<>();
-    try {
-      for (Locale locale : tts.getAvailableLanguages()) {
-        locales.add(locale.toLanguageTag());
-      }
-      result.success(locales);
-    } catch (NullPointerException e) {
-      Log.d(tag, "getAvailableLanguages: " + e.getMessage() + " - (known issue with API 21 & 22)");
-      result.success(null);
-    }
+  void getSpeechRateValidRange(Result result) {
+    // Valid values available in the android documentation.
+    // https://developer.android.com/reference/android/speech/tts/TextToSpeech#setSpeechRate(float)
+    final HashMap<String, String> data = new HashMap<String, String>();
+    data.put("min", "0");
+    data.put("normal", "1");
+    data.put("max", "3");
+    data.put("platform", "android");
+    result.success(data);
   }
 
-  void speak(String text) {
-    uuid = UUID.randomUUID().toString();
-    if (Build.VERSION.SDK_INT >= 21) {
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, uuid);
+  private void speak(String text) {
+    String uuid = UUID.randomUUID().toString();
+    utterances.put(uuid, text);
+    if (silencems > 0) {
+      tts.playSilentUtterance(silencems, TextToSpeech.QUEUE_FLUSH, SILENCE_PREFIX + uuid);
+      tts.speak(text, TextToSpeech.QUEUE_ADD, bundle, uuid);
     } else {
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, uuid);
     }
   }
 
   void stop() {
     tts.stop();
+  }
+
+  private void synthesizeToFile(String text, String fileName) {
+    File file = new File(context.getExternalFilesDir(null), fileName);
+    String uuid = UUID.randomUUID().toString();
+    bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, SYNTHESIZE_TO_FILE_PREFIX + uuid);
+
+    int result = tts.synthesizeToFile(text, bundle, file, SYNTHESIZE_TO_FILE_PREFIX + uuid);
+    if (result == TextToSpeech.SUCCESS) {
+      Log.d(tag, "Successfully created file : " + file.getPath());
+    } else {
+      Log.d(tag, "Failed creating file : " + file.getPath());
+    }
+  }
+
+  private void invokeMethod(final String method, final Object arguments) {
+    handler.post(
+      new Runnable() {
+        @Override
+        public void run() {
+          if (methodChannel != null) methodChannel.invokeMethod(method, arguments);
+        }
+      }
+    );
   }
 }
