@@ -172,7 +172,7 @@ public class FlutterTtsPlugin implements MethodCallHandler, FlutterPlugin {
   };
 
   @Override
-  public void onMethodCall(MethodCall call, Result result) {
+  public void onMethodCall(@NonNull final MethodCall call, @NonNull final Result result) {
     // If TTS is still loading
     if (!isTtsInitialized) {
       // Suspend method call until the TTS engine is ready
