@@ -9,7 +9,6 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.util.Log;
-import androidx.annotation.NonNull;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
@@ -59,12 +58,12 @@ public class FlutterTtsPlugin implements MethodCallHandler, FlutterPlugin {
   
   /** Android Plugin APIs */
   @Override
-  public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+  public void onAttachedToEngine(FlutterPluginBinding binding) {
     initInstance(binding.getBinaryMessenger(), binding.getApplicationContext());
   }
 
   @Override
-  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+  public void onDetachedFromEngine(FlutterPluginBinding binding) {
     stop();
     tts.shutdown();
     context = null;
@@ -172,7 +171,7 @@ public class FlutterTtsPlugin implements MethodCallHandler, FlutterPlugin {
   };
 
   @Override
-  public void onMethodCall(@NonNull final MethodCall call, @NonNull final Result result) {
+  public void onMethodCall(final MethodCall call, final Result result) {
     /*// If TTS is still loading
     if (!isTtsInitialized) {
       // Suspend method call until the TTS engine is ready
